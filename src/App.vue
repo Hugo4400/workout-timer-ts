@@ -1,29 +1,220 @@
 <template>
   <div id="app">
-    <img alt="Vue logo" src="./assets/logo.png">
-    <HelloWorld msg="Welcome to Your Vue.js + TypeScript App"/>
+    <div id="timerList">
+      <timer v-for="i in timers" v-bind:key="i" :id="i" />
+    </div>
+    <br>
+    <button id="addTimer" @click="addTimer()" class="h-btn action">Add timer&nbsp;&nbsp;&nbsp;<font-awesome-icon icon="plus"></font-awesome-icon></button>
+    <div class="repCounter">
+      <button id="removeRep" class="h-btn delete" @click="removeRep" title="Click here to remove a rep!"><font-awesome-icon icon="minus"></font-awesome-icon></button>
+      <input id="repNumber" type="number" v-model="reps">
+      <button id="addRep" class="h-btn delete" @click="addRep" title="Click here to add a rep!"><font-awesome-icon icon="plus"></font-awesome-icon></button>
+    </div>
+    <h1 v-if="done">
+      DONE !
+    </h1>
+    <div id="linkButtonContainer">
+      <button id="linkButton" class="h-btn delete" @click="genLink" title="Click here to generate a sharable link!"><font-awesome-icon icon="link"></font-awesome-icon></button>
+    </div>
   </div>
 </template>
 
 <script lang="ts">
-import Vue from 'vue';
-import HelloWorld from './components/HelloWorld.vue';
+  import timer from './components/timer.vue'
+  import tinycolor from 'tinycolor2'
+  import store from './store'
+  import keys from 'lodash.keys'
+  import Swal from 'sweetalert2'
+  import { Vue, Component, Prop, Watch, Ref } from 'vue-property-decorator'
 
-export default Vue.extend({
-  name: 'App',
-  components: {
-    HelloWorld,
-  },
-});
+  @Component({
+    components: {
+      timer
+    }
+  })
+  export default class App extends Vue {
+
+    primaryColors = ['#663399', '#2abb9b', '#f2784b', '#00b5cc']
+    doneSound = new Audio(require('@/assets/timer-done.wav'))
+
+    get timers() {
+      return store.state.timers
+    }
+
+    get done() {
+      const done = store.state.done
+      if (done) {
+        this.doneSound.play()
+      }
+      return done;
+    }
+
+    get reps() {
+      return store.state.reps
+    }
+
+    set reps(reps: number) {
+      store.commit('setReps', reps)
+    }
+
+    addTimer() {
+      const newId = (this.timers.length !== 0)?+this.timers[this.timers.length-1]+1:1
+      store.commit('increment', newId)
+    }
+
+    addRep() {
+      store.commit('addRep')
+    }
+
+    removeRep() {
+      store.commit('removeRep')
+    }
+
+    setPrimaryColor() {
+      const primaryColor = this.primaryColors[Math.floor(Math.random()*this.primaryColors.length)]
+
+      const css = 'body { border-top: 6px solid '+primaryColor+'; }' +
+        '.h-btn.action { background-color: '+primaryColor+'; } ' +
+        '.h-btn.action:hover{ box-shadow: 3px 4px 0 0 '+tinycolor(primaryColor).darken(20).toString()+'; }' +
+        '.timer #title { color: '+tinycolor(primaryColor).lighten(10).toString()+'; }' +
+        '.timer .timerInt { color: '+primaryColor+'; }' +
+        '#repNumber { color: '+primaryColor+'; }';
+
+
+      let style = document.createElement('style');
+
+      if (style.sheet) {
+        style.sheet.insertRule(css);
+      } else {
+        style.appendChild(document.createTextNode(css));
+      }
+      document.getElementsByTagName('head')[0].appendChild(style);
+    }
+
+    genLink() {
+
+      let timers = localStorage.getItem('timers')
+      if (timers !== null) {
+        timers = JSON.parse(timers)
+      }
+
+      let reps = localStorage.getItem('reps')
+      if (reps !== null) {
+        reps = JSON.parse(reps)
+      }
+
+      const link: string = window.location.origin + '/' + btoa(JSON.stringify({timers: timers, reps: reps}));
+
+      const clipboard: Clipboard = navigator.clipboard;
+      if (typeof clipboard === "undefined") {
+        Swal.fire({
+          icon: 'success',
+          text: link,
+          showConfirmButton: false
+        })
+      } else {
+        navigator.clipboard.writeText(link).then(function () {
+          Swal.fire({
+            position: 'top-end',
+            icon: 'success',
+            title: 'Link copied',
+            showConfirmButton: false,
+            timer: 1500
+          })
+        }, function () {
+          Swal.fire({
+            icon: 'success',
+            text: link,
+            showConfirmButton: false
+          })
+        });
+      }
+    }
+
+    mounted() {
+      this.setPrimaryColor();
+
+      let timers: string | null = null
+      let reps: string | null = null
+
+      interface timer {
+        timers : [],
+        reps: number
+      }
+
+      let encodedTimer: string | timer = window.location.pathname.split('/')[1];
+      if (encodedTimer !== "") {
+
+        try {
+          encodedTimer = <timer>JSON.parse(atob(encodedTimer));
+          timers = JSON.stringify(encodedTimer.timers)
+          reps = JSON.stringify(encodedTimer.reps)
+        } catch(e) {
+          timers = null
+          reps = null
+        }
+
+      }
+
+      if (timers === null && reps === null) {
+        timers = localStorage.getItem('timers')
+        reps = localStorage.getItem('reps')
+      } else if (typeof timers === 'string' && typeof  reps === 'string') {
+        localStorage.setItem('timers', timers)
+        localStorage.setItem('reps', reps)
+      }
+
+      if (timers !== null) {
+        store.commit('load', keys(JSON.parse(timers)).map(Number))
+      }
+
+      if (reps !== null) {
+        store.commit('setReps', reps)
+      }
+    }
+  }
 </script>
 
 <style lang="scss">
-#app {
-  font-family: Avenir, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-align: center;
-  color: #2c3e50;
-  margin-top: 60px;
-}
+
+  @import "~normalize.css";
+  @import "./assets/h.scss";
+  @import "~include-media/dist/include-media";
+
+  $breakpoints: (phone: 320px, tablet: 768px, desktop: 1024px);
+
+  #app {
+    text-align: center;
+    font-family: 'Baloo Paaji 2', sans-serif;
+  }
+
+  .timer {
+
+    margin-top: 30px;
+
+    #title {
+      width: 300px;
+      font-size: 36px;
+      border: none;
+    }
+    .timernbs {
+      display: block;
+      font-size: 24px;
+    }
+    .timerInt {
+      border: none;
+      font-size: 24px;
+      width: 100px;
+      text-align: right;
+
+      /* Inclusive and exclusive operators for a finer control over the intervals */
+      @include media(">phone", "<=tablet") {
+        width: 80px;
+      }
+      /* Use ligatured operators if you fancy a slicker declaration */
+      @include media("<phone") {
+        width: 70px;
+      }
+    }
+  }
 </style>
